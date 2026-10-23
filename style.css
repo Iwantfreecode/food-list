@@ -1,9 +1,9 @@
-/* look: typed text, white page, pink highlights, dotted lines, no cards */
+/* look: typed text, dark page, pink highlights, dotted lines, no cards */
 
 body {
   font-family: "Courier Prime", monospace;
-  background: #ffffff;
-  color: #111111;
+  background: #121212;
+  color: #eeeeee;
   max-width: 720px;
   margin: 0 auto;
   padding: 16px;
@@ -12,9 +12,10 @@ body {
 
 h1, h2 { font-weight: 700; }
 
-mark { background: #ffd1e8; padding: 0 3px; }
+/* pink highlight: dark text on pink so it stays readable */
+mark { background: #ff8cc6; color: #121212; padding: 0 3px; }
 
-hr { border: none; border-top: 2px dotted #e75fa5; margin: 20px 0; }
+hr { border: none; border-top: 2px dotted #ff8cc6; margin: 20px 0; }
 
 label { display: block; margin-top: 10px; }
 p label { display: inline; margin-right: 12px; }
@@ -25,28 +26,33 @@ input[type="text"] {
   font-family: inherit;
   font-size: 16px;
   padding: 8px;
-  border: 1px dotted #111;
-  background: #fff;
+  border: 1px dotted #eeeeee;
+  background: #1e1e1e;
+  color: #eeeeee;
 }
 
 button {
   font-family: inherit;
   font-size: 16px;
   padding: 8px 12px;
-  border: 1px dotted #e75fa5;
-  background: #ffd1e8;
+  border: 1px dotted #ff8cc6;
+  background: #ff8cc6;
+  color: #121212;
   cursor: pointer;
 }
 
 #status { min-height: 1.5em; }
 
-#map { height: 340px; border: 1px dotted #111; }
+#map { height: 340px; border: 1px dotted #eeeeee; }
+
+/* the map pictures are light by default; this flips them to a dark map */
+.leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9); }
 
 #results { list-style: none; padding: 0; }
 
-#results li { padding: 10px 0; border-bottom: 1px dotted #aaa; }
+#results li { padding: 10px 0; border-bottom: 1px dotted #666; }
 
 .box { cursor: pointer; font-weight: 700; }
 .done .name { text-decoration: line-through; color: #888; }
-.meta { color: #555; font-size: 14px; display: block; margin-left: 28px; }
-a { color: #c2377f; }
+.meta { color: #aaaaaa; font-size: 14px; display: block; margin-left: 28px; }
+a { color: #ff8cc6; }

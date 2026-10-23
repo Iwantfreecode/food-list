@@ -13,7 +13,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
   <!-- ?v=2 forces browsers to fetch the newest style.css instead of an old saved copy -->
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
@@ -26,7 +26,22 @@
     mode:
     <label><input type="radio" name="mode" value="route" checked> route</label>
     <label><input type="radio" name="mode" value="spot"> pick a spot</label>
+    <label><input type="radio" name="mode" value="all"> all places</label>
   </p>
+
+  <!-- FILTERS: used by every mode. "all" in a dropdown means no filter. -->
+  <div id="filters">
+    <label for="f-food">food</label>
+    <select id="f-food"><option value="">all</option></select>
+
+    <label for="f-type">type</label>
+    <select id="f-type"><option value="">all</option></select>
+
+    <label for="f-area">area</label>
+    <select id="f-area"><option value="">all</option></select>
+  </div>
+
+  <hr>
 
   <!-- ROUTE mode -->
   <div id="route-box">
@@ -61,6 +76,11 @@
     <button id="go-spot">[ find food near here ]</button>
   </div>
 
+  <!-- ALL mode: nothing to type, the list shows by itself -->
+  <div id="all-box" hidden>
+    <p>every saved place on the map. use the filters above to narrow it down.</p>
+  </div>
+
   <p id="status"></p>
 
   <hr>
@@ -71,6 +91,6 @@
   <ul id="results"></ul>
 
   <!-- ?v=3 forces browsers to fetch the newest app.js -->
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

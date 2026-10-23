@@ -115,7 +115,7 @@ async function findDetours(start, end, directMinutes, line, places, limit) {
 function addItem(p, label) {
   L.circleMarker([p.lat, p.lng], { color: "#111", fillColor: "#ffd1e8", fillOpacity: 1, radius: 8 })
     .addTo(drawing)
-    .bindPopup(p.Name + " (" + label + ")");
+    .bindPopup(label ? p.Name + " (" + label + ")" : p.Name);
 
   const li = document.createElement("li");
 
@@ -129,7 +129,7 @@ function addItem(p, label) {
 
   const name = document.createElement("span");
   name.className = "name";
-  name.textContent = p.Name + " — " + label;
+  name.textContent = label ? p.Name + " — " + label : p.Name;
 
   const meta = document.createElement("span");
   meta.className = "meta";
@@ -177,7 +177,7 @@ $("go").onclick = async () => {
     const direct = await getRoute([start, end]);
 
     setStatus("loading saved places...");
-    const places = await loadPlaces();
+    const places = await getPlaces();
 
     const found = await findDetours(start, end, direct.minutes, direct.line, places, limit);
     show(direct.line, start, end, found);
@@ -277,7 +277,7 @@ $("go-spot").onclick = async () => {
     }
 
     setStatus("loading saved places...");
-    const places = await loadPlaces();
+    const places = await getPlaces();
 
     setStatus("checking drive times...");
     const found = await findNear(spot, places, maxMinutes);
@@ -288,17 +288,112 @@ $("go-spot").onclick = async () => {
   }
 };
 
-// ---------- switch between the two modes ----------
+// =====================================================
+// filters (food / type / area) + "all places" mode
+// =====================================================
+
+let allPlaces = null; // every place from the sheet, loaded once and kept
+
+const showError = (err) => setStatus("oops: " + err.message);
+
+// "Japanese, Shabu" or "Japanese + Shabu" -> ["japanese", "shabu"]
+function foodWords(p) {
+  return (p["What food"] || "").split(/[,+]/).map((w) => w.trim().toLowerCase()).filter(Boolean);
+}
+
+// fill one dropdown. keys are lowercase (for matching), labels are what you see.
+function fillSelect(id, entries) {
+  const select = $(id);
+  const keep = select.value;
+  select.length = 1; // keep only the first "all" option
+  const sorted = [...entries].sort((a, b) => a[1].localeCompare(b[1]));
+  for (const [key, label] of sorted) {
+    select.add(new Option(label.charAt(0).toUpperCase() + label.slice(1), key));
+  }
+  select.value = keep;
+}
+
+// build the dropdown choices from whatever is in the sheet right now
+function fillFilters(places) {
+  const food = new Map(), type = new Map(), area = new Map();
+  for (const p of places) {
+    for (const w of (p["What food"] || "").split(/[,+]/)) {
+      const word = w.trim();
+      if (word && !food.has(word.toLowerCase())) food.set(word.toLowerCase(), word);
+    }
+    if (p.Type) type.set(p.Type.toLowerCase(), p.Type);
+    if (p.Area && !area.has(p.Area.toLowerCase())) area.set(p.Area.toLowerCase(), p.Area);
+  }
+  fillSelect("f-food", food);
+  fillSelect("f-type", type);
+  fillSelect("f-area", area);
+}
+
+// the one place every mode gets its places from: load once, then apply the filters
+async function getPlaces() {
+  if (!allPlaces) {
+    allPlaces = await loadPlaces();
+    fillFilters(allPlaces);
+  }
+  const food = $("f-food").value;
+  const type = $("f-type").value;
+  const area = $("f-area").value;
+  return allPlaces.filter(
+    (p) =>
+      (!food || foodWords(p).includes(food)) &&
+      (!type || p.Type.toLowerCase() === type) &&
+      (!area || p.Area.toLowerCase() === area)
+  );
+}
+
+// "all places" mode: no route, no spot. just everything that matches the filters.
+async function showAll() {
+  const places = await getPlaces();
+  drawing.clearLayers();
+  $("list-title").textContent = "all places";
+  $("results").innerHTML = "";
+
+  if (!places.length) {
+    $("results").textContent = "nothing matches those filters.";
+    setStatus("0 places");
+    return;
+  }
+  for (const p of places) addItem(p, "");
+  map.fitBounds(L.latLngBounds(places.map((p) => [p.lat, p.lng])).pad(0.1));
+  setStatus(places.length + " place(s)");
+}
+
+// changing a filter: all mode updates right away, the other modes need the button again
+for (const id of ["f-food", "f-type", "f-area"]) {
+  $(id).onchange = () => {
+    if (currentMode() === "all") showAll().catch(showError);
+    else setStatus("filter set. press the find button again.");
+  };
+}
+
+// ---------- switch between the three modes ----------
 function currentMode() {
   return document.querySelector('input[name="mode"]:checked').value;
 }
 
 function applyMode() {
-  const isSpot = currentMode() === "spot";
-  $("route-box").hidden = isSpot;
-  $("spot-box").hidden = !isSpot;
+  const mode = currentMode();
+  $("route-box").hidden = mode !== "route";
+  $("spot-box").hidden = mode !== "spot";
+  $("all-box").hidden = mode !== "all";
+
+  // start each mode clean so old pins and results don't confuse you
+  spot = null;
+  $("spot").value = "";
+  drawing.clearLayers();
+  $("results").innerHTML = "";
   setStatus("");
+
+  if (mode === "all") showAll().catch(showError);
 }
 
 for (const radio of document.querySelectorAll('input[name="mode"]')) radio.onchange = applyMode;
 applyMode();
+
+// load the sheet right away so the filter dropdowns are filled when the page opens
+getPlaces().catch(showError);

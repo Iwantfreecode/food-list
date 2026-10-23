@@ -1,0 +1,52 @@
+/* look: typed text, white page, pink highlights, dotted lines, no cards */
+
+body {
+  font-family: "Courier Prime", monospace;
+  background: #ffffff;
+  color: #111111;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px;
+  line-height: 1.5;
+}
+
+h1, h2 { font-weight: 700; }
+
+mark { background: #ffd1e8; padding: 0 3px; }
+
+hr { border: none; border-top: 2px dotted #e75fa5; margin: 20px 0; }
+
+label { display: block; margin-top: 10px; }
+p label { display: inline; margin-right: 12px; }
+
+input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 16px;
+  padding: 8px;
+  border: 1px dotted #111;
+  background: #fff;
+}
+
+button {
+  font-family: inherit;
+  font-size: 16px;
+  padding: 8px 12px;
+  border: 1px dotted #e75fa5;
+  background: #ffd1e8;
+  cursor: pointer;
+}
+
+#status { min-height: 1.5em; }
+
+#map { height: 340px; border: 1px dotted #111; }
+
+#results { list-style: none; padding: 0; }
+
+#results li { padding: 10px 0; border-bottom: 1px dotted #aaa; }
+
+.box { cursor: pointer; font-weight: 700; }
+.done .name { text-decoration: line-through; color: #888; }
+.meta { color: #555; font-size: 14px; display: block; margin-left: 28px; }
+a { color: #c2377f; }

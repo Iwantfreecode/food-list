@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>food on the way</title>
+
+  <!-- font: Courier Prime (typed-text look) -->
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+
+  <!-- map library: Leaflet (draws the map and the pins) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <h1>food on the way</h1>
+  <p>type where we start and where we're going. <mark>the site shows our saved places</mark> that are on the route or a short detour away.</p>
+
+  <hr>
+
+  <label for="start">from</label>
+  <input id="start" type="text" placeholder="e.g. KMITL Ladkrabang">
+
+  <label for="end">to</label>
+  <input id="end" type="text" placeholder="e.g. Pattaya">
+
+  <p>
+    max detour:
+    <label><input type="radio" name="limit" value="10" checked> 10 min</label>
+    <label><input type="radio" name="limit" value="20"> 20 min</label>
+  </p>
+
+  <button id="go">[ find food ]</button>
+  <p id="status"></p>
+
+  <hr>
+
+  <div id="map"></div>
+
+  <h2>on the route</h2>
+  <ul id="results"></ul>
+
+  <script src="app.js"></script>
+</body>
+</html>

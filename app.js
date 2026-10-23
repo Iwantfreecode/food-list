@@ -109,6 +109,42 @@ async function findDetours(start, end, directMinutes, line, places, limit) {
 }
 
 // ---------- step 6: show everything ----------
+
+// one saved place -> one pin on the map + one "[ ]" line in the list
+// (both modes use this, so the list looks the same everywhere)
+function addItem(p, label) {
+  L.circleMarker([p.lat, p.lng], { color: "#111", fillColor: "#ffd1e8", fillOpacity: 1, radius: 8 })
+    .addTo(drawing)
+    .bindPopup(p.Name + " (" + label + ")");
+
+  const li = document.createElement("li");
+
+  const box = document.createElement("span");
+  box.className = "box";
+  box.textContent = "[ ] ";
+  box.onclick = () => {
+    const done = li.classList.toggle("done");
+    box.textContent = done ? "[x] " : "[ ] ";
+  };
+
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = p.Name + " — " + label;
+
+  const meta = document.createElement("span");
+  meta.className = "meta";
+  meta.textContent = [p.Type, p.Area, p["What food"]].filter(Boolean).join(" · ") + " · ";
+
+  const link = document.createElement("a");
+  link.href = "https://www.google.com/maps/search/?api=1&query=" + p.lat + "," + p.lng;
+  link.target = "_blank";
+  link.textContent = "open in maps";
+  meta.appendChild(link);
+
+  li.append(box, name, meta);
+  $("results").appendChild(li);
+}
+
 function show(line, start, end, found) {
   drawing.clearLayers();
   L.polyline(line, { color: "#e75fa5", weight: 4 }).addTo(drawing);
@@ -116,46 +152,14 @@ function show(line, start, end, found) {
   L.marker([end.lat, end.lng]).addTo(drawing).bindPopup("end");
   map.fitBounds(L.polyline(line).getBounds());
 
-  const list = $("results");
-  list.innerHTML = "";
+  $("list-title").textContent = "on the route";
+  $("results").innerHTML = "";
 
   if (!found.length) {
-    list.textContent = "nothing saved within that detour. try 20 min.";
+    $("results").textContent = "nothing saved within that detour. try 20 min.";
     return;
   }
-
-  for (const p of found) {
-    L.circleMarker([p.lat, p.lng], { color: "#111", fillColor: "#ffd1e8", fillOpacity: 1, radius: 8 })
-      .addTo(drawing)
-      .bindPopup(p.Name + " (+" + Math.round(p.detour) + " min)");
-
-    const li = document.createElement("li");
-
-    const box = document.createElement("span");
-    box.className = "box";
-    box.textContent = "[ ] ";
-    box.onclick = () => {
-      const done = li.classList.toggle("done");
-      box.textContent = done ? "[x] " : "[ ] ";
-    };
-
-    const name = document.createElement("span");
-    name.className = "name";
-    name.textContent = p.Name + " — " + (p.detour < 2 ? "on the way" : "+" + Math.round(p.detour) + " min");
-
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = [p.Type, p.Area, p["What food"]].filter(Boolean).join(" · ") + " · ";
-
-    const link = document.createElement("a");
-    link.href = "https://www.google.com/maps/search/?api=1&query=" + p.lat + "," + p.lng;
-    link.target = "_blank";
-    link.textContent = "open in maps";
-    meta.appendChild(link);
-
-    li.append(box, name, meta);
-    list.appendChild(li);
-  }
+  for (const p of found) addItem(p, p.detour < 2 ? "on the way" : "+" + Math.round(p.detour) + " min");
 }
 
 // ---------- the button ----------
@@ -182,3 +186,119 @@ $("go").onclick = async () => {
     setStatus("oops: " + err.message);
   }
 };
+
+// =====================================================
+// pick-a-spot mode: choose ONE place, see saved food near it
+// =====================================================
+
+let spot = null; // the chosen spot {lat, lng}. null = "use whatever is typed in the box"
+
+// three ways to choose the spot: tap the map, type a name, or use my location.
+function setSpot(point, label) {
+  spot = point;
+  $("spot").value = label;
+  drawing.clearLayers();
+  L.marker([point.lat, point.lng]).addTo(drawing).bindPopup("spot");
+}
+
+// 1) tap the map (only counts while "pick a spot" is selected)
+map.on("click", (e) => {
+  if (currentMode() !== "spot") return;
+  setSpot({ lat: e.latlng.lat, lng: e.latlng.lng }, "pin on map");
+});
+
+// 2) typing a new name throws away the old pin, so the text wins again
+$("spot").oninput = () => { spot = null; };
+
+// 3) "use my location" (the phone asks permission first)
+$("here").onclick = () => {
+  if (!navigator.geolocation) return setStatus("oops: this browser can't share location");
+  setStatus("getting your location...");
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      setSpot({ lat: pos.coords.latitude, lng: pos.coords.longitude }, "my location");
+      map.setView([spot.lat, spot.lng], 14);
+      setStatus("got it. now press [ find food near here ]");
+    },
+    () => setStatus("oops: location was blocked. type a place or tap the map instead.")
+  );
+};
+
+// driving time from the spot to many places in ONE request (OSRM "table" service)
+async function driveTimes(from, places) {
+  const coords = [from, ...places].map((p) => p.lng + "," + p.lat).join(";");
+  const url = "https://router.project-osrm.org/table/v1/driving/" + coords + "?sources=0&annotations=duration";
+  const data = await (await fetch(url)).json();
+  if (data.code !== "Ok") throw new Error("couldn't get drive times");
+  // durations[0][0] is spot -> spot, so place i is at i + 1. seconds -> minutes
+  return places.map((p, i) => ({ ...p, minutes: data.durations[0][i + 1] / 60 }));
+}
+
+async function findNear(from, places, maxMinutes) {
+  // cheap first pass: closest 90 within 25 km in a straight line (the free server limits request size)
+  const close = places
+    .map((p) => ({ ...p, straight: km([from.lat, from.lng], [p.lat, p.lng]) }))
+    .filter((p) => p.straight <= 25)
+    .sort((a, b) => a.straight - b.straight)
+    .slice(0, 90);
+  if (!close.length) return [];
+
+  const timed = await driveTimes(from, close);
+  return timed
+    .filter((p) => p.minutes <= maxMinutes) // null (no road) becomes 0 here, so skip those too
+    .filter((p) => p.minutes > 0 || p.straight < 0.2)
+    .sort((a, b) => a.minutes - b.minutes);
+}
+
+function showNear(from, found) {
+  drawing.clearLayers();
+  L.marker([from.lat, from.lng]).addTo(drawing).bindPopup("spot");
+
+  $("list-title").textContent = "near the spot";
+  $("results").innerHTML = "";
+
+  if (!found.length) {
+    $("results").textContent = "nothing saved that close. try 20 min.";
+    map.setView([from.lat, from.lng], 13);
+    return;
+  }
+  for (const p of found) addItem(p, Math.max(1, Math.round(p.minutes)) + " min away");
+  map.fitBounds(L.latLngBounds([[from.lat, from.lng], ...found.map((p) => [p.lat, p.lng])]).pad(0.2));
+}
+
+$("go-spot").onclick = async () => {
+  try {
+    const maxMinutes = Number(document.querySelector('input[name="drive"]:checked').value);
+
+    if (!spot) {
+      if (!$("spot").value.trim()) throw new Error("type a place, tap the map, or use my location");
+      setStatus("finding spot...");
+      spot = await geocode($("spot").value);
+    }
+
+    setStatus("loading saved places...");
+    const places = await loadPlaces();
+
+    setStatus("checking drive times...");
+    const found = await findNear(spot, places, maxMinutes);
+    showNear(spot, found);
+    setStatus("found " + found.length + " place(s) within " + maxMinutes + " min");
+  } catch (err) {
+    setStatus("oops: " + err.message);
+  }
+};
+
+// ---------- switch between the two modes ----------
+function currentMode() {
+  return document.querySelector('input[name="mode"]:checked').value;
+}
+
+function applyMode() {
+  const isSpot = currentMode() === "spot";
+  $("route-box").hidden = isSpot;
+  $("spot-box").hidden = !isSpot;
+  setStatus("");
+}
+
+for (const radio of document.querySelectorAll('input[name="mode"]')) radio.onchange = applyMode;
+applyMode();

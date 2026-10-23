@@ -22,28 +22,55 @@
 
   <hr>
 
-  <label for="start">from</label>
-  <input id="start" type="text" placeholder="e.g. KMITL Ladkrabang">
-
-  <label for="end">to</label>
-  <input id="end" type="text" placeholder="e.g. Pattaya">
-
   <p>
-    max detour:
-    <label><input type="radio" name="limit" value="10" checked> 10 min</label>
-    <label><input type="radio" name="limit" value="20"> 20 min</label>
+    mode:
+    <label><input type="radio" name="mode" value="route" checked> route</label>
+    <label><input type="radio" name="mode" value="spot"> pick a spot</label>
   </p>
 
-  <button id="go">[ find food ]</button>
+  <!-- ROUTE mode -->
+  <div id="route-box">
+    <label for="start">from</label>
+    <input id="start" type="text" placeholder="e.g. KMITL Ladkrabang">
+
+    <label for="end">to</label>
+    <input id="end" type="text" placeholder="e.g. Pattaya">
+
+    <p>
+      max detour:
+      <label><input type="radio" name="limit" value="10" checked> 10 min</label>
+      <label><input type="radio" name="limit" value="20"> 20 min</label>
+    </p>
+
+    <button id="go">[ find food ]</button>
+  </div>
+
+  <!-- SPOT mode -->
+  <div id="spot-box" hidden>
+    <label for="spot">spot</label>
+    <input id="spot" type="text" placeholder="type a place, or tap the map below">
+    <p><button id="here">[ use my location ]</button></p>
+
+    <p>
+      max drive:
+      <label><input type="radio" name="drive" value="5"> 5 min</label>
+      <label><input type="radio" name="drive" value="10" checked> 10 min</label>
+      <label><input type="radio" name="drive" value="20"> 20 min</label>
+    </p>
+
+    <button id="go-spot">[ find food near here ]</button>
+  </div>
+
   <p id="status"></p>
 
   <hr>
 
   <div id="map"></div>
 
-  <h2>on the route</h2>
+  <h2 id="list-title">on the route</h2>
   <ul id="results"></ul>
 
-  <script src="app.js"></script>
+  <!-- ?v=3 forces browsers to fetch the newest app.js -->
+  <script src="app.js?v=3"></script>
 </body>
 </html>

@@ -162,16 +162,67 @@ function show(line, start, end, found) {
   for (const p of found) addItem(p, p.detour < 2 ? "on the way" : "+" + Math.round(p.detour) + " min");
 }
 
+// ---------- route mode: set start/end by typing, my location, or tapping the map ----------
+// a pinned point {lat, lng} wins over the typed text. null = "use the text box".
+const routePins = { start: null, end: null };
+let pickTarget = null; // "start" or "end" while waiting for a map tap, otherwise null
+
+// ask the phone for its location (it asks permission first), then call onFound
+function locate(onFound) {
+  if (!navigator.geolocation) return setStatus("oops: this browser can't share location");
+  setStatus("getting your location...");
+  navigator.geolocation.getCurrentPosition(
+    (pos) => onFound({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+    () => setStatus("oops: location was blocked. type a place or pick on the map instead.")
+  );
+}
+
+// remember a point for "start" or "end", fill its text box, and redraw both pins
+function setRoutePin(which, point, label) {
+  routePins[which] = point;
+  pickTarget = null;
+  $(which).value = label;
+  drawing.clearLayers();
+  for (const name of ["start", "end"]) {
+    const p = routePins[name];
+    if (p) L.marker([p.lat, p.lng]).addTo(drawing).bindPopup(name);
+  }
+}
+
+for (const which of ["start", "end"]) {
+  // typing a new name throws away the old pin, so the text wins again
+  $(which).oninput = () => { routePins[which] = null; };
+
+  $(which + "-here").onclick = () =>
+    locate((point) => {
+      setRoutePin(which, point, "my location");
+      map.setView([point.lat, point.lng], 14);
+      setStatus("got it.");
+    });
+
+  $(which + "-pick").onclick = () => {
+    pickTarget = which;
+    setStatus("tap the map to set the " + which + ".");
+  };
+}
+
 // ---------- the button ----------
 $("go").onclick = async () => {
   try {
     const limit = Number(document.querySelector('input[name="limit"]:checked').value);
 
-    setStatus("finding start...");
-    const start = await geocode($("start").value);
-    await sleep(1100); // the geocoder allows about 1 request per second
-    setStatus("finding destination...");
-    const end = await geocode($("end").value);
+    // use the pin if there is one, otherwise look the typed text up
+    let start = routePins.start;
+    if (!start) {
+      setStatus("finding start...");
+      start = await geocode($("start").value);
+      await sleep(1100); // the geocoder allows about 1 request per second
+    }
+    let end = routePins.end;
+    if (!end) {
+      setStatus("finding destination...");
+      end = await geocode($("end").value);
+    }
 
     setStatus("drawing route...");
     const direct = await getRoute([start, end]);
@@ -203,26 +254,21 @@ function setSpot(point, label) {
 
 // 1) tap the map (only counts while "pick a spot" is selected)
 map.on("click", (e) => {
-  if (currentMode() !== "spot") return;
-  setSpot({ lat: e.latlng.lat, lng: e.latlng.lng }, "pin on map");
+  const point = { lat: e.latlng.lat, lng: e.latlng.lng };
+  if (currentMode() === "route" && pickTarget) setRoutePin(pickTarget, point, "pin on map");
+  else if (currentMode() === "spot") setSpot(point, "pin on map");
 });
 
 // 2) typing a new name throws away the old pin, so the text wins again
 $("spot").oninput = () => { spot = null; };
 
 // 3) "use my location" (the phone asks permission first)
-$("here").onclick = () => {
-  if (!navigator.geolocation) return setStatus("oops: this browser can't share location");
-  setStatus("getting your location...");
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      setSpot({ lat: pos.coords.latitude, lng: pos.coords.longitude }, "my location");
-      map.setView([spot.lat, spot.lng], 14);
-      setStatus("got it. now press [ find food near here ]");
-    },
-    () => setStatus("oops: location was blocked. type a place or tap the map instead.")
-  );
-};
+$("here").onclick = () =>
+  locate((point) => {
+    setSpot(point, "my location");
+    map.setView([point.lat, point.lng], 14);
+    setStatus("got it. now press [ find food near here ]");
+  });
 
 // driving time from the spot to many places in ONE request (OSRM "table" service)
 async function driveTimes(from, places) {
@@ -385,6 +431,9 @@ function applyMode() {
   // start each mode clean so old pins and results don't confuse you
   spot = null;
   $("spot").value = "";
+  routePins.start = routePins.end = null;
+  pickTarget = null;
+  $("start").value = $("end").value = "";
   drawing.clearLayers();
   $("results").innerHTML = "";
   setStatus("");

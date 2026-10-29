@@ -4,6 +4,10 @@ const SHEET_ID = "1-1Xmboyd_65Knd7jcQthWV6rsvK8GhZRWal7xj7FTpM";
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&sheet=Sheet1";
 
+// the small helper that opens Google Maps SHORT links (see the worker/ folder).
+// leave it empty until the helper is set up. long links work without it.
+const RESOLVER_URL = "";
+
 const PREFILTER_KM = 10; // ignore places farther than this from the route (saves requests)
 const OSRM = "https://router.project-osrm.org/route/v1/driving/";
 
@@ -239,6 +243,153 @@ $("go").onclick = async () => {
 };
 
 // =====================================================
+// paste a google maps link (route mode = a route, spot mode = a place)
+// =====================================================
+
+const safeDecode = (text) => {
+  try { return decodeURIComponent(text); } catch { return text; }
+};
+
+// "13.75,100.54" -> {lat, lng}. anything else -> null
+function exactPoint(text) {
+  const m = (text || "").trim().match(/^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
+  if (!m) return null;
+  const point = { lat: Number(m[1]), lng: Number(m[2]) };
+  return Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180 ? point : null;
+}
+
+// short links (maps.app.goo.gl) go to our helper, which answers with the long link.
+async function expandLink(text) {
+  let host = "";
+  try { host = new URL(text.trim()).hostname; } catch { /* not a link */ }
+  if (!host) throw new Error("that doesn't look like a link");
+  if (host !== "maps.app.goo.gl" && host !== "goo.gl") return text.trim(); // already long
+
+  if (!RESOLVER_URL) {
+    throw new Error("short links need the helper. open the link, copy the long link from the address bar, paste that.");
+  }
+  const data = await (await fetch(RESOLVER_URL + "?url=" + encodeURIComponent(text.trim()))).json();
+  if (!data.url) throw new Error(data.error || "couldn't open that short link");
+  return data.url;
+}
+
+// a place link -> { point } if the link holds exact coordinates, otherwise { name } to look up
+function placeFromUrl(url) {
+  const full = safeDecode(url);
+  const u = new URL(url);
+
+  // 1) the exact pin google stores inside the link: !3d(lat)!4d(lng)
+  let m = full.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (m) return { point: { lat: Number(m[1]), lng: Number(m[2]) } };
+
+  // 2) ?q=lat,lng  (or query / ll). if it's text instead, remember it as a name
+  let name = "";
+  for (const key of ["q", "query", "ll", "destination"]) {
+    const value = u.searchParams.get(key);
+    if (!value) continue;
+    const point = exactPoint(value);
+    if (point) return { point };
+    name = name || value;
+  }
+
+  // 3) the map centre @lat,lng (less exact, so only after the others)
+  m = full.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  const centre = m ? { lat: Number(m[1]), lng: Number(m[2]) } : null;
+
+  // 4) /place/Some+Name/
+  m = u.pathname.match(/\/place\/([^/]+)/);
+  if (m) name = safeDecode(m[1].replace(/\+/g, " "));
+
+  if (name) return { name, point: centre };
+  return centre ? { point: centre } : {};
+}
+
+// a route link -> list of stops, each { name, point } (point may be missing)
+function routeFromUrl(url) {
+  const full = safeDecode(url);
+  const u = new URL(url);
+
+  // style A: ...maps/dir/?api=1&origin=...&destination=...
+  if (u.searchParams.get("destination")) {
+    return ["origin", "destination"]
+      .map((key) => u.searchParams.get(key))
+      .filter(Boolean)
+      .map((text) => ({ name: text, point: exactPoint(text) }));
+  }
+
+  // style B: ...maps/dir/Place+A/Place+B/@lat,lng,zoom/data=...
+  const after = u.pathname.split("/dir/")[1] || "";
+  const names = after
+    .split("/")
+    .filter((s) => s && !s.startsWith("@") && !s.startsWith("data="))
+    .map((s) => safeDecode(s.replace(/\+/g, " ")));
+
+  // google also hides each stop's exact coordinates in the data part: !1d(lng)!2d(lat)
+  const hidden = [...full.matchAll(/!1d(-?\d+\.\d+)!2d(-?\d+\.\d+)/g)]
+    .map((m) => ({ lat: Number(m[2]), lng: Number(m[1]) }))
+    .filter((p) => Math.abs(p.lat) <= 90); // if the order was wrong, lat would be ~100 and get dropped
+
+  return names.map((name, i) => ({
+    name,
+    point: exactPoint(name) || (hidden.length === names.length ? hidden[i] : null),
+  }));
+}
+
+// a stop with no coordinates gets looked up by name
+async function resolveStop(stop) {
+  if (stop.point) return stop.point;
+  await sleep(1100); // the geocoder allows about 1 request per second
+  return geocode(stop.name);
+}
+
+// a name that is really just coordinates isn't worth showing
+const niceName = (name) => (!name || exactPoint(name) ? "pin from link" : name);
+
+// route mode: link -> start + end -> run the search
+$("route-link-go").onclick = async () => {
+  try {
+    setStatus("reading link...");
+    const stops = routeFromUrl(await expandLink($("route-link").value));
+    if (stops.length < 2) throw new Error("couldn't find a route in that link");
+
+    // stops in the middle are ignored. only the first and last count.
+    const first = stops[0], last = stops[stops.length - 1];
+    setStatus("finding places...");
+    const start = await resolveStop(first);
+    const end = await resolveStop(last);
+
+    setRoutePin("start", start, niceName(first.name));
+    setRoutePin("end", end, niceName(last.name));
+    $("route-link").value = "";
+    await $("go").onclick();
+  } catch (err) {
+    setStatus("oops: " + err.message);
+  }
+};
+
+// spot mode: link -> spot -> run the search
+$("spot-link-go").onclick = async () => {
+  try {
+    setStatus("reading link...");
+    const place = placeFromUrl(await expandLink($("spot-link").value));
+
+    let point = place.point;
+    if (!point && place.name) {
+      setStatus("finding place...");
+      point = await geocode(place.name); // no coordinates in the link: look the name up
+    }
+    if (!point) throw new Error("couldn't find a place in that link");
+
+    setSpot(point, niceName(place.name));
+    map.setView([point.lat, point.lng], 14);
+    $("spot-link").value = "";
+    await $("go-spot").onclick();
+  } catch (err) {
+    setStatus("oops: " + err.message);
+  }
+};
+
+// =====================================================
 // pick-a-spot mode: choose ONE place, see saved food near it
 // =====================================================
 
@@ -434,6 +585,7 @@ function applyMode() {
   routePins.start = routePins.end = null;
   pickTarget = null;
   $("start").value = $("end").value = "";
+  $("route-link").value = $("spot-link").value = "";
   drawing.clearLayers();
   $("results").innerHTML = "";
   setStatus("");

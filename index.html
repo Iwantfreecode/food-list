@@ -59,6 +59,10 @@
       <button id="end-pick">[ pick on map ]</button>
     </p>
 
+    <label for="route-link">or paste a google maps route link</label>
+    <input id="route-link" type="text" placeholder="https://maps.app.goo.gl/...">
+    <p><button id="route-link-go">[ use link ]</button></p>
+
     <p>
       max detour:
       <label><input type="radio" name="limit" value="10" checked> 10 min</label>
@@ -73,6 +77,10 @@
     <label for="spot">spot</label>
     <input id="spot" type="text" placeholder="type a place, or tap the map below">
     <p><button id="here">[ use my location ]</button></p>
+
+    <label for="spot-link">or paste a google maps place link</label>
+    <input id="spot-link" type="text" placeholder="https://maps.app.goo.gl/...">
+    <p><button id="spot-link-go">[ use link ]</button></p>
 
     <p>
       max drive:
@@ -99,6 +107,6 @@
   <ul id="results"></ul>
 
   <!-- ?v=3 forces browsers to fetch the newest app.js -->
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

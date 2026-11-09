@@ -502,9 +502,12 @@ let allPlaces = null; // every place from the sheet, loaded once and kept
 const showError = (err) => setStatus("oops: " + err.message);
 
 // "Japanese, Shabu" or "Japanese + Shabu" -> ["japanese", "shabu"]
-function foodWords(p) {
-  return (p["What food"] || "").split(/[,+]/).map((w) => w.trim().toLowerCase()).filter(Boolean);
+// one splitter for every multi-value cell (What food and Type)
+function splitWords(text) {
+  return (text || "").split(/[,+]/).map((w) => w.trim().toLowerCase()).filter(Boolean);
 }
+const foodWords = (p) => splitWords(p["What food"]);
+const typeWords = (p) => splitWords(p.Type); // "Food, Snack & cafe" -> ["food", "snack & cafe"]
 
 // fill one dropdown. keys are lowercase (for matching), labels are what you see.
 function fillSelect(id, entries) {
@@ -526,7 +529,10 @@ function fillFilters(places) {
       const word = w.trim();
       if (word && !food.has(word.toLowerCase())) food.set(word.toLowerCase(), word);
     }
-    if (p.Type) type.set(p.Type.toLowerCase(), p.Type);
+    for (const w of (p.Type || "").split(/[,+]/)) {
+      const word = w.trim();
+      if (word && !type.has(word.toLowerCase())) type.set(word.toLowerCase(), word);
+    }
     if (p.Area && !area.has(p.Area.toLowerCase())) area.set(p.Area.toLowerCase(), p.Area);
   }
   fillSelect("f-food", food);
@@ -546,7 +552,7 @@ async function getPlaces() {
   return allPlaces.filter(
     (p) =>
       (!food || foodWords(p).includes(food)) &&
-      (!type || p.Type.toLowerCase() === type) &&
+      (!type || typeWords(p).includes(type)) &&
       (!area || p.Area.toLowerCase() === area)
   );
 }

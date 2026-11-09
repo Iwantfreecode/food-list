@@ -6,7 +6,7 @@ const SHEET_CSV_URL =
 
 // the small helper that opens Google Maps SHORT links (see the worker/ folder).
 // leave it empty until the helper is set up. long links work without it.
-const RESOLVER_URL = "";
+const RESOLVER_URL = "https://food-list.freewifi-exe.workers.dev/";
 
 const PREFILTER_KM = 10; // ignore places farther than this from the route (saves requests)
 const OSRM = "https://router.project-osrm.org/route/v1/driving/";
@@ -270,7 +270,15 @@ async function expandLink(text) {
   }
   const data = await (await fetch(RESOLVER_URL + "?url=" + encodeURIComponent(text.trim()))).json();
   if (!data.url) throw new Error(data.error || "couldn't open that short link");
-  return data.url;
+  return unwrapSorry(data.url);
+}
+
+// google sometimes answers the helper with a "sorry" page (it thinks the helper is a robot).
+// the real link is still inside it, in the "continue" part, so we pull it out.
+function unwrapSorry(url) {
+  const u = new URL(url);
+  const inner = u.pathname.startsWith("/sorry") ? u.searchParams.get("continue") : null;
+  return inner || url;
 }
 
 // a place link -> { point } if the link holds exact coordinates, otherwise { name } to look up

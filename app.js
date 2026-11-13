@@ -27,7 +27,43 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 const drawing = L.layerGroup().addTo(map); // everything we draw goes here so we can clear it
 
 // ---------- step 1: turn typed text into coordinates ----------
+
+// search places by name (malls, shops, stations...). Photon is a free search made for
+// "type and see matches", and it understands half-typed names like "siam parag".
+// the lat/lon nudges results toward Bangkok, and we keep only places in Thailand.
+async function searchPlaces(text) {
+  const url =
+    "https://photon.komoot.io/api/?limit=10&lang=en&lat=13.75&lon=100.6&q=" +
+    encodeURIComponent(text);
+  const data = await (await fetch(url)).json();
+  const seen = new Set();
+  const found = [];
+  for (const f of data.features || []) {
+    const p = f.properties;
+    if (p.countrycode !== "TH" || !p.name) continue;
+    const [lng, lat] = f.geometry.coordinates; // geojson order is lng, lat
+    const key = p.name + lat.toFixed(3) + lng.toFixed(3); // drop exact duplicates
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push({
+      name: p.name,
+      detail: [p.district || p.locality, p.city].filter(Boolean).join(", "),
+      lat,
+      lng,
+    });
+    if (found.length === 6) break;
+  }
+  return found;
+}
+
+// one best guess for typed text: try the name search first, then the older address search
 async function geocode(text) {
+  try {
+    const found = await searchPlaces(text);
+    if (found.length) return { lat: found[0].lat, lng: found[0].lng };
+  } catch (err) {
+    // the name search is down: fall through to the backup below
+  }
   const url =
     "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=th&q=" +
     encodeURIComponent(text);
@@ -418,8 +454,52 @@ map.on("click", (e) => {
   else if (currentMode() === "spot") setSpot(point, "pin on map");
 });
 
-// 2) typing a new name throws away the old pin, so the text wins again
-$("spot").oninput = () => { spot = null; };
+// 2) type a name: matching places appear under the box, tap one to set the spot.
+//    typing also throws away the old pin, so the text wins again.
+let suggestTimer = null;
+
+async function showSuggestions(text) {
+  const list = $("spot-suggest");
+  try {
+    const found = await searchPlaces(text);
+    if ($("spot").value.trim() !== text) return; // you kept typing; this answer is old
+    list.innerHTML = "";
+    if (!found.length) {
+      list.innerHTML = "<li>no match. try another spelling, or tap the map.</li>";
+      return;
+    }
+    for (const place of found) {
+      const li = document.createElement("li");
+      li.textContent = place.name;
+      if (place.detail) {
+        const detail = document.createElement("span");
+        detail.className = "meta";
+        detail.textContent = place.detail;
+        li.appendChild(detail);
+      }
+      li.onclick = () => {
+        setSpot({ lat: place.lat, lng: place.lng }, place.name);
+        list.innerHTML = "";
+        map.setView([place.lat, place.lng], 15);
+        setStatus("got it. now press [ find food near here ]");
+      };
+      list.appendChild(li);
+    }
+  } catch (err) {
+    list.innerHTML = "<li>search is down. press [ find food near here ] to try anyway.</li>";
+  }
+}
+
+$("spot").oninput = () => {
+  spot = null;
+  clearTimeout(suggestTimer);
+  const text = $("spot").value.trim();
+  if (text.length < 3) {
+    $("spot-suggest").innerHTML = "";
+    return;
+  }
+  suggestTimer = setTimeout(() => showSuggestions(text), 400); // wait for a pause in typing
+};
 
 // 3) "use my location" (the phone asks permission first)
 $("here").onclick = () =>

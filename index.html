@@ -75,7 +75,8 @@
   <!-- SPOT mode -->
   <div id="spot-box" hidden>
     <label for="spot">spot</label>
-    <input id="spot" type="text" placeholder="type a place, or tap the map below">
+    <input id="spot" type="text" placeholder="type a place, e.g. fashion island" autocomplete="off">
+    <ul id="spot-suggest"></ul>
     <p><button id="here">[ use my location ]</button></p>
 
     <label for="spot-link">or paste a google maps place link</label>
@@ -107,6 +108,6 @@
   <ul id="results"></ul>
 
   <!-- ?v=3 forces browsers to fetch the newest app.js -->
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

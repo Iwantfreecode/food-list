@@ -64,9 +64,9 @@ button {
 #results li { padding: 10px 0; border-bottom: 1px dotted #666; }
 
 /* matching places that appear under the spot box while you type */
-#spot-suggest { list-style: none; padding: 0; margin: 0; }
-#spot-suggest li { padding: 10px 8px; border-bottom: 1px dotted #666; cursor: pointer; }
-#spot-suggest .meta { margin-left: 0; }
+#spot-suggest, #start-suggest, #end-suggest { list-style: none; padding: 0; margin: 0; }
+#spot-suggest li, #start-suggest li, #end-suggest li { padding: 10px 8px; border-bottom: 1px dotted #666; cursor: pointer; }
+#spot-suggest .meta, #start-suggest .meta, #end-suggest .meta { margin-left: 0; }
 
 .box { cursor: pointer; font-weight: 700; }
 .done .name { text-decoration: line-through; color: #888; }

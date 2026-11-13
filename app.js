@@ -72,6 +72,56 @@ async function geocode(text) {
   return { lat: Number(data[0].lat), lng: Number(data[0].lon) };
 }
 
+// a text box that shows matching places under it while you type. tap one to pick it.
+// the list lives in <ul id="BOXID-suggest">. used by the spot box and the route from/to boxes.
+//   onType() runs on every keystroke (the caller forgets its old pin)
+//   onPick({name, lat, lng}) runs when you tap a match
+function attachSuggest(inputId, onType, onPick) {
+  const input = $(inputId);
+  const list = $(inputId + "-suggest");
+  let timer = null;
+
+  async function show(text) {
+    try {
+      const found = await searchPlaces(text);
+      if (input.value.trim() !== text) return; // you kept typing; this answer is old
+      list.innerHTML = "";
+      if (!found.length) {
+        list.innerHTML = "<li>no match. try another spelling, or tap the map.</li>";
+        return;
+      }
+      for (const place of found) {
+        const li = document.createElement("li");
+        li.textContent = place.name;
+        if (place.detail) {
+          const detail = document.createElement("span");
+          detail.className = "meta";
+          detail.textContent = place.detail;
+          li.appendChild(detail);
+        }
+        li.onclick = () => {
+          list.innerHTML = "";
+          onPick(place);
+        };
+        list.appendChild(li);
+      }
+    } catch (err) {
+      list.innerHTML = "<li>search is down. press the find button to try anyway.</li>";
+    }
+  }
+
+  input.oninput = () => {
+    onType();
+    clearTimeout(timer);
+    const text = input.value.trim();
+    if (text.length < 3) {
+      list.innerHTML = "";
+      return;
+    }
+    timer = setTimeout(() => show(text), 400); // wait for a pause in typing
+  };
+}
+
 // ---------- step 2: get the driving route ----------
 async function getRoute(points) {
   // OSRM wants "lng,lat;lng,lat;..."
@@ -230,8 +280,17 @@ function setRoutePin(which, point, label) {
 }
 
 for (const which of ["start", "end"]) {
-  // typing a new name throws away the old pin, so the text wins again
-  $(which).oninput = () => { routePins[which] = null; };
+  // type a name: matches appear under the box, tap one to set this end of the route.
+  // typing also throws away the old pin, so the text wins again.
+  attachSuggest(
+    which,
+    () => { routePins[which] = null; },
+    (place) => {
+      setRoutePin(which, { lat: place.lat, lng: place.lng }, place.name);
+      map.setView([place.lat, place.lng], 14);
+      setStatus("got it.");
+    }
+  );
 
   $(which + "-here").onclick = () =>
     locate((point) => {
@@ -456,50 +515,15 @@ map.on("click", (e) => {
 
 // 2) type a name: matching places appear under the box, tap one to set the spot.
 //    typing also throws away the old pin, so the text wins again.
-let suggestTimer = null;
-
-async function showSuggestions(text) {
-  const list = $("spot-suggest");
-  try {
-    const found = await searchPlaces(text);
-    if ($("spot").value.trim() !== text) return; // you kept typing; this answer is old
-    list.innerHTML = "";
-    if (!found.length) {
-      list.innerHTML = "<li>no match. try another spelling, or tap the map.</li>";
-      return;
-    }
-    for (const place of found) {
-      const li = document.createElement("li");
-      li.textContent = place.name;
-      if (place.detail) {
-        const detail = document.createElement("span");
-        detail.className = "meta";
-        detail.textContent = place.detail;
-        li.appendChild(detail);
-      }
-      li.onclick = () => {
-        setSpot({ lat: place.lat, lng: place.lng }, place.name);
-        list.innerHTML = "";
-        map.setView([place.lat, place.lng], 15);
-        setStatus("got it. now press [ find food near here ]");
-      };
-      list.appendChild(li);
-    }
-  } catch (err) {
-    list.innerHTML = "<li>search is down. press [ find food near here ] to try anyway.</li>";
+attachSuggest(
+  "spot",
+  () => { spot = null; },
+  (place) => {
+    setSpot({ lat: place.lat, lng: place.lng }, place.name);
+    map.setView([place.lat, place.lng], 15);
+    setStatus("got it. now press [ find food near here ]");
   }
-}
-
-$("spot").oninput = () => {
-  spot = null;
-  clearTimeout(suggestTimer);
-  const text = $("spot").value.trim();
-  if (text.length < 3) {
-    $("spot-suggest").innerHTML = "";
-    return;
-  }
-  suggestTimer = setTimeout(() => showSuggestions(text), 400); // wait for a pause in typing
-};
+);
 
 // 3) "use my location" (the phone asks permission first)
 $("here").onclick = () =>
@@ -680,6 +704,7 @@ function applyMode() {
   pickTarget = null;
   $("start").value = $("end").value = "";
   $("route-link").value = $("spot-link").value = "";
+  for (const id of ["spot", "start", "end"]) $(id + "-suggest").innerHTML = ""; // hide old matches
   drawing.clearLayers();
   $("results").innerHTML = "";
   setStatus("");

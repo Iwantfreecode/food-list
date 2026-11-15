@@ -226,7 +226,10 @@ function addItem(p, label) {
   meta.textContent = [p.Type, p.Area, p["What food"]].filter(Boolean).join(" · ") + " · ";
 
   const link = document.createElement("a");
-  link.href = "https://www.google.com/maps/search/?api=1&query=" + p.lat + "," + p.lng;
+  // search the restaurant NAME, centered on its pin, so google opens the real place card
+  // (reviews, hours, photos) instead of a bare coordinate dot
+  link.href = "https://www.google.com/maps/search/" + encodeURIComponent(p.Name) +
+    "/@" + p.lat + "," + p.lng + ",17z";
   link.target = "_blank";
   link.textContent = "open in maps";
   meta.appendChild(link);

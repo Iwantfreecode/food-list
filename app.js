@@ -8,8 +8,18 @@ const SHEET_CSV_URL =
 // leave it empty until the helper is set up. long links work without it.
 const RESOLVER_URL = "https://food-list.freewifi-exe.workers.dev/";
 
-const PREFILTER_KM = 10; // ignore places farther than this from the route (saves requests)
-const OSRM = "https://router.project-osrm.org/route/v1/driving/";
+// two free routing servers: one knows car roads, one knows footpaths.
+// "far" = straight-line km we even bother checking (saves requests).
+// walking 20 min is only ~1.5 km, so walking checks a much smaller circle.
+const TRAVEL = {
+  car:  { server: "https://router.project-osrm.org", routeKm: 10, spotKm: 25 },
+  walk: { server: "https://routing.openstreetmap.de/routed-foot", routeKm: 2, spotKm: 3 },
+};
+
+// which one is ticked right now: "car" or "walk"
+function travel() {
+  return TRAVEL[document.querySelector('input[name="by"]:checked').value];
+}
 
 // ---------- small helpers ----------
 const $ = (id) => document.getElementById(id);
@@ -126,7 +136,7 @@ function attachSuggest(inputId, onType, onPick) {
 async function getRoute(points) {
   // OSRM wants "lng,lat;lng,lat;..."
   const coords = points.map((p) => p.lng + "," + p.lat).join(";");
-  const url = OSRM + coords + "?overview=full&geometries=geojson";
+  const url = travel().server + "/route/v1/driving/" + coords + "?overview=full&geometries=geojson";
   const data = await (await fetch(url)).json();
   if (data.code !== "Ok") throw new Error("no route found");
   const route = data.routes[0];
@@ -186,7 +196,7 @@ function distanceToRoute(place, line) {
 // ---------- step 5: real detour time for each nearby place ----------
 // detour = (start -> place -> end) minus (start -> end)
 async function findDetours(start, end, directMinutes, line, places, limit) {
-  const nearby = places.filter((p) => distanceToRoute(p, line) <= PREFILTER_KM);
+  const nearby = places.filter((p) => distanceToRoute(p, line) <= travel().routeKm);
   const found = [];
   for (let i = 0; i < nearby.length; i++) {
     setStatus("checking detours " + (i + 1) + " / " + nearby.length + " ...");
@@ -536,26 +546,27 @@ $("here").onclick = () =>
     setStatus("got it. now press [ find food near here ]");
   });
 
-// driving time from the spot to many places in ONE request (OSRM "table" service)
-async function driveTimes(from, places) {
+// car or walking time from the spot to many places in ONE request (OSRM "table" service)
+// (the "/driving/" in the url is just OSRM's fixed word; the server decides car vs foot)
+async function travelTimes(from, places) {
   const coords = [from, ...places].map((p) => p.lng + "," + p.lat).join(";");
-  const url = "https://router.project-osrm.org/table/v1/driving/" + coords + "?sources=0&annotations=duration";
+  const url = travel().server + "/table/v1/driving/" + coords + "?sources=0&annotations=duration";
   const data = await (await fetch(url)).json();
-  if (data.code !== "Ok") throw new Error("couldn't get drive times");
+  if (data.code !== "Ok") throw new Error("couldn't get travel times");
   // durations[0][0] is spot -> spot, so place i is at i + 1. seconds -> minutes
   return places.map((p, i) => ({ ...p, minutes: data.durations[0][i + 1] / 60 }));
 }
 
 async function findNear(from, places, maxMinutes) {
-  // cheap first pass: closest 90 within 25 km in a straight line (the free server limits request size)
+  // cheap first pass: closest 90 in a straight line (the free server limits request size)
   const close = places
     .map((p) => ({ ...p, straight: km([from.lat, from.lng], [p.lat, p.lng]) }))
-    .filter((p) => p.straight <= 25)
+    .filter((p) => p.straight <= travel().spotKm)
     .sort((a, b) => a.straight - b.straight)
     .slice(0, 90);
   if (!close.length) return [];
 
-  const timed = await driveTimes(from, close);
+  const timed = await travelTimes(from, close);
   return timed
     .filter((p) => p.minutes <= maxMinutes) // null (no road) becomes 0 here, so skip those too
     .filter((p) => p.minutes > 0 || p.straight < 0.2)
@@ -591,7 +602,7 @@ $("go-spot").onclick = async () => {
     setStatus("loading saved places...");
     const places = await getPlaces();
 
-    setStatus("checking drive times...");
+    setStatus("checking travel times...");
     const found = await findNear(spot, places, maxMinutes);
     showNear(spot, found);
     setStatus("found " + found.length + " place(s) within " + maxMinutes + " min");

@@ -39,6 +39,13 @@
 
     <label for="f-area">area</label>
     <select id="f-area"><option value="">all</option></select>
+
+    <!-- how we're getting there: changes which routing server counts the minutes -->
+    <p>
+      by:
+      <label><input type="radio" name="by" value="car" checked> car</label>
+      <label><input type="radio" name="by" value="walk"> walking</label>
+    </p>
   </div>
 
   <hr>
@@ -86,7 +93,7 @@
     <p><button id="spot-link-go">[ use link ]</button></p>
 
     <p>
-      max drive:
+      max time:
       <label><input type="radio" name="drive" value="5"> 5 min</label>
       <label><input type="radio" name="drive" value="10" checked> 10 min</label>
       <label><input type="radio" name="drive" value="20"> 20 min</label>
@@ -110,6 +117,6 @@
   <ul id="results"></ul>
 
   <!-- ?v=3 forces browsers to fetch the newest app.js -->
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
